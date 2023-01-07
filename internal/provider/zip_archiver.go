@@ -36,7 +36,11 @@ func (a *ZipArchiver) ArchiveContent(content []byte, infilename string) error {
 	}
 
 	_, err = f.Write(content)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return a.finalize()
 }
 
 func (a *ZipArchiver) ArchiveFile(infilename string) error {
@@ -78,7 +82,11 @@ func (a *ZipArchiver) ArchiveFile(infilename string) error {
 	}
 
 	_, err = f.Write(content)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return a.finalize()
 }
 
 func checkMatch(fileName string, excludes []string) (value bool) {
@@ -110,7 +118,7 @@ func (a *ZipArchiver) ArchiveDir(indirname string, excludes []string) error {
 	}
 	defer a.close()
 
-	return filepath.Walk(indirname, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(indirname, func(path string, info os.FileInfo, err error) error {
 
 		if err != nil {
 			return fmt.Errorf("error encountered during file walk: %s", err)
@@ -166,6 +174,11 @@ func (a *ZipArchiver) ArchiveDir(indirname string, excludes []string) error {
 		_, err = f.Write(content)
 		return err
 	})
+	if err != nil {
+		return err
+	}
+
+	return a.finalize()
 }
 
 func (a *ZipArchiver) ArchiveMultiple(content map[string][]byte) error {
@@ -193,7 +206,7 @@ func (a *ZipArchiver) ArchiveMultiple(content map[string][]byte) error {
 			return err
 		}
 	}
-	return nil
+	return a.finalize()
 }
 
 func (a *ZipArchiver) SetOutputFileMode(outputFileMode string) {
@@ -201,13 +214,22 @@ func (a *ZipArchiver) SetOutputFileMode(outputFileMode string) {
 }
 
 func (a *ZipArchiver) open() error {
-	f, err := os.Create(a.filepath)
+	f, err := os.CreateTemp("", "*.zip")
 	if err != nil {
 		return err
 	}
 	a.filewriter = f
 	a.writer = zip.NewWriter(f)
 	return nil
+}
+
+func (a *ZipArchiver) finalize() error {
+	if a.filewriter == nil {
+		return fmt.Errorf("error reading file for finalizing")
+	}
+	temppath := a.filewriter.Name()
+	a.close()
+	return os.Rename(temppath, a.filepath)
 }
 
 func (a *ZipArchiver) close() {
