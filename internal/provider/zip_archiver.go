@@ -3,6 +3,7 @@ package archive
 import (
 	"archive/zip"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -216,7 +217,7 @@ func (a *ZipArchiver) SetOutputFileMode(outputFileMode string) {
 func (a *ZipArchiver) open() error {
 	f, err := os.CreateTemp("", "*.zip")
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating temp file: %s", err)
 	}
 	a.filewriter = f
 	a.writer = zip.NewWriter(f)
@@ -224,12 +225,18 @@ func (a *ZipArchiver) open() error {
 }
 
 func (a *ZipArchiver) finalize() error {
-	if a.filewriter == nil {
-		return fmt.Errorf("error reading file for finalizing")
+	f, err := os.Create(a.filepath)
+	if err != nil {
+		return fmt.Errorf("error creating file to finalize: %s", err)
 	}
-	temppath := a.filewriter.Name()
-	a.close()
-	return os.Rename(temppath, a.filepath)
+	defer f.Close()
+
+	_, err = io.Copy(f, a.filewriter)
+	if err != nil {
+		return fmt.Errorf("error copying file to finalize: %s", err)
+	}
+
+	return nil
 }
 
 func (a *ZipArchiver) close() {
@@ -239,6 +246,7 @@ func (a *ZipArchiver) close() {
 	}
 	if a.filewriter != nil {
 		a.filewriter.Close()
+		os.Remove(a.filewriter.Name())
 		a.filewriter = nil
 	}
 }
