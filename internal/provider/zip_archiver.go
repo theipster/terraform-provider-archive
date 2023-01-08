@@ -37,11 +37,7 @@ func (a *ZipArchiver) ArchiveContent(content []byte, infilename string) error {
 	}
 
 	_, err = f.Write(content)
-	if err != nil {
-		return err
-	}
-
-	return a.finalize()
+	return err
 }
 
 func (a *ZipArchiver) ArchiveFile(infilename string) error {
@@ -83,11 +79,7 @@ func (a *ZipArchiver) ArchiveFile(infilename string) error {
 	}
 
 	_, err = f.Write(content)
-	if err != nil {
-		return err
-	}
-
-	return a.finalize()
+	return err
 }
 
 func checkMatch(fileName string, excludes []string) (value bool) {
@@ -119,7 +111,7 @@ func (a *ZipArchiver) ArchiveDir(indirname string, excludes []string) error {
 	}
 	defer a.close()
 
-	err = filepath.Walk(indirname, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(indirname, func(path string, info os.FileInfo, err error) error {
 
 		if err != nil {
 			return fmt.Errorf("error encountered during file walk: %s", err)
@@ -175,11 +167,6 @@ func (a *ZipArchiver) ArchiveDir(indirname string, excludes []string) error {
 		_, err = f.Write(content)
 		return err
 	})
-	if err != nil {
-		return err
-	}
-
-	return a.finalize()
 }
 
 func (a *ZipArchiver) ArchiveMultiple(content map[string][]byte) error {
@@ -207,7 +194,7 @@ func (a *ZipArchiver) ArchiveMultiple(content map[string][]byte) error {
 			return err
 		}
 	}
-	return a.finalize()
+	return nil
 }
 
 func (a *ZipArchiver) SetOutputFileMode(outputFileMode string) {
@@ -224,16 +211,22 @@ func (a *ZipArchiver) open() error {
 	return nil
 }
 
-func (a *ZipArchiver) finalize() error {
-	f, err := os.Create(a.filepath)
+func (a *ZipArchiver) finalize(temppath string) error {
+	temp, err := os.Open(temppath)
 	if err != nil {
-		return fmt.Errorf("error creating file to finalize: %s", err)
+		return fmt.Errorf("error reading temp file: %s", err)
 	}
-	defer f.Close()
+	defer temp.Close()
 
-	_, err = io.Copy(f, a.filewriter)
+	final, err := os.Create(a.filepath)
 	if err != nil {
-		return fmt.Errorf("error copying file to finalize: %s", err)
+		return fmt.Errorf("error creating finalized file: %s", err)
+	}
+	defer final.Close()
+
+	_, err = io.Copy(final, temp)
+	if err != nil {
+		return fmt.Errorf("error copying finalized contents: %s", err)
 	}
 
 	return nil
@@ -245,8 +238,8 @@ func (a *ZipArchiver) close() {
 		a.writer = nil
 	}
 	if a.filewriter != nil {
+		defer a.finalize(a.filewriter.Name())
 		a.filewriter.Close()
-		os.Remove(a.filewriter.Name())
 		a.filewriter = nil
 	}
 }
