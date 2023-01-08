@@ -238,9 +238,10 @@ func (a *ZipArchiver) close() {
 		a.writer = nil
 	}
 	if a.filewriter != nil {
-		temppath := a.filewriter.Name()
-
 		a.filewriter.Close()
+		temppath := a.filewriter.Name()
+		fi, _ := os.Stat(temppath)
+		fmt.Printf("(%s %v)", temppath, fi)
 		a.filewriter = nil
 
 		a.finalize(temppath)
