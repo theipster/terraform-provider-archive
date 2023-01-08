@@ -212,8 +212,6 @@ func (a *ZipArchiver) open() error {
 }
 
 func (a *ZipArchiver) finalize(temppath string) error {
-	defer os.Remove(temppath)
-
 	temp, err := os.Open(temppath)
 	if err != nil {
 		return fmt.Errorf("error reading temp file: %s", err)
@@ -240,13 +238,12 @@ func (a *ZipArchiver) close() {
 		a.writer = nil
 	}
 	if a.filewriter != nil {
-		defer func(temppath string) {
-			fmt.Printf("(%s ", temppath)
-			_, fi := os.Stat(temppath)
-			fmt.Printf(" %v)", fi)
-		}(a.filewriter.Name())
-		defer a.finalize(a.filewriter.Name())
+		temppath := a.filewriter.Name()
+
 		a.filewriter.Close()
 		a.filewriter = nil
+
+		a.finalize(temppath)
+		os.Remove(temppath)
 	}
 }
